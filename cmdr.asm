@@ -20,16 +20,19 @@
 #define  org   .org
 #define  end   .end
 
-; Sum EQUates
+; Some EQUates
+
+; the following are offsets into the calculator's workspace RAM
 ;
-CURPANE     .equ  $5d         ; index to pane flag, 0 or 1
-PRINTMOD    .equ  $5e         ; index to inverse flag, 0 or $80
-QFLAGS      .equ  $5f         ; index to misc flags
+CURPANE     .equ  $5d         ; pane flag, 0 or 1
+PRINTMOD    .equ  $5e         ; inverse flag, 0 or $80
+DBFLAG      .equ  $5f         ; show last-k value on screen
 FFLAGS      .equ  $60         ; selected file flags
 KBSTATE     .equ  $61         ; flag indicates waiting for release or press
 XLOADFLAG   .equ  $62         ; bit 0 set indicates we need a ';x' on the load command
 
 NUMINLIST   .equ  19
+MAXLISTIDX  .equ  NUMINLIST-1
 
 CXLATTAB    .equ  $7000
 FILEPATH1   .equ  $6f80
@@ -74,8 +77,6 @@ api_xfer       .equ $1ffc
 api_rdjoy      .equ $1ffe
 
 
-; TODO - dot to move up a directory level?
-
 
          org   $4009
 
@@ -86,12 +87,10 @@ api_rdjoy      .equ $1ffe
 
 ;; STARTS HERE ;)
 
-; TODO - fix . / .. confusion. 
-
 starthere:
    xor   a
    ld    (iy+CURPANE),a
-   ld    (iy+QFLAGS),a
+   ld    (iy+DBFLAG),a
    ld    (iy+PRINTMOD),a
    ld    (iy+KBSTATE),a
    ld    (iy+XLOADFLAG),a
@@ -1169,7 +1168,7 @@ keyshow:
    call  pr_pos
 
    set   7,(iy+PRINTMOD)
-   bit   0,(iy+QFLAGS)
+   bit   0,(iy+DBFLAG)
    jr    nz,ks_show
 
    xor   a
@@ -1307,45 +1306,40 @@ joycodes:
    dw    $efef, $dfef, $dff7, $f7ef, $fdbf
 
 keyStates:
-   .dw   $efef             ; 7 (selection up)
+   .dw   $efef             ; selection up [7]
    .db   0,0
    .dw   kType3
-   .dw   selectionUp
+   .dw   keySelectionUp
 
-   .dw   $dfef             ; 6 (selection down)
+   .dw   $dfef             ; selection down [6]
    .db   0,0
    .dw   kType3
-   .dw   selectionDown
+   .dw   keySelectionDown
 
-   .dw   $dff7             ; shift-5 (pane left)
+   .dw   $dff7             ; left pane [shift-5]
    .db   0,0
    .dw   kType1   ; press/release
-   .dw   keyShiftLeftPress
+   .dw   keyLeftPane
 
-   .dw   $f7ef             ; shift-8 (pane right)
+   .dw   $f7ef             ; right pane [shift-8]
    .db   0,0
    .dw   kType1
-   .dw   keyShiftRightPress
+   .dw   keyRightPane
 
-   .dw   $fdbf             ; enter
+   .dw   $fdbf             ; enter dir\execute [enter]
    .db   0,0
    .dw   kType1
    .dw   keyEnter
 
-   .dw   $fcbf             ; shift-enter
+   .dw   $fcbf             ; open dir in other pane [shift-enter]
    .db   0,0
    .dw   kType1
    .dw   keyShiftEnter
 
-   .dw   $f6fe             ; shift-x (load;x)
+   .dw   $f6fe             ; load;x [shift-x]
    .db   0,0
    .dw   kType1
    .dw   keyXecute
-
-   .dw   $fcfb             ; shift-q (quit)
-   .db   0,0
-   .dw   kType1
-   .dw   keyQuit
 
    .dw   $f6fd             ; delete [shift-d]
    .db   0,0
@@ -1367,17 +1361,39 @@ keyStates:
    .dw   kType1
    .dw   keyRename
 
-   .dw   $f6bf             ; kreat directory [shift-k]
+   .dw   $f6bf             ; create directory [shift-k]
    .db   0,0
    .dw   kType1
    .dw   keyCreatedir
 
-   .dw   $debf             ; shift-h = help
+   .dw   $fa7f             ; up a level [.]
+   .db   0,0
+   .dw   kType1
+   .dw   keyUpALevel
+
+   .dw   $deef             ; down fast [shift-6]
+   .db   0,0
+   .dw   kType1
+   .dw   keyDownFast
+
+   .dw   $eeef             ; up fast [shift-7]
+   .db   0,0
+   .dw   kType1
+   .dw   keyUpFast
+
+   .dw   $debf             ; help [shift-h]
    .db   0,0
    .dw   kType1
    .dw   keyHelp
 
-   .dw   $fcf7             ; shift-1 = enable key display
+   .dw   $fcfb             ; quit [shift-q]
+   .db   0,0
+   .dw   kType1
+   .dw   keyQuit
+
+   .db   0                  ; no useful key codes have an lsb of zero
+
+   .dw   $fcf7             ; enable key display [shift-1]
    .db   0,0
    .dw   kType1
    .dw   keyShift1
@@ -1422,11 +1438,12 @@ titlestr:
 ;         --------========--------========
    dt    "        ZXPAND-COMMANDER        "
    db    $ff
-   db    $0d
-   dt    "VERSION 1.3"
+   dt    "VERSION 1.4"
    db    $ff
    db    $0d
    dt    "CURSOR KEYS - MOVE SELECTION"
+   db    $ff
+   dt    "SHIFT UP/DN - JUMP UP/DN"
    db    $ff
    db    $0d
    dt    "ENTER - OPEN SUBDIR OR EXEC PROG"
@@ -1446,6 +1463,8 @@ titlestr:
    dt    "SHIFT R - RENAME FILE"
    db    $ff
    dt    "SHIFT K - KREATE A SUBDIR"
+   db    $ff
+   dt    ". - GO UP A DIR LEVEL"
    db    $ff
    dt    "SHIFT-SPACE CANCELS TEXT INPUT"
    db    $ff

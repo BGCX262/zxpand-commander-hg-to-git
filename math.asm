@@ -2,6 +2,28 @@
 ; -MATH-HELPER-FUNCTIONS-------------------------------------------------------
 ; -----------------------------------------------------------------------------
 
+
+; returns smallest of hl, de in hl
+;
+smallest:
+   push  hl
+   and   a
+   sbc   hl,de
+   pop   hl
+   ret   c
+   ex    de,hl
+   ret
+
+; return with Z flag set if hl==de, c set if de > hl
+;
+areequal:
+   push  hl
+   and   a
+   sbc   hl,de
+   pop   hl
+   ret
+
+
 ; multiply HL by some power of 2
 ;
 hltimes32:

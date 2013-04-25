@@ -189,14 +189,14 @@ kt3_done:
 
 
 keyShift1:
-   bit   0,(iy+QFLAGS)
+   bit   0,(iy+DBFLAG)
    jr    z,ksc_set
 
-   res   0,(iy+QFLAGS)
+   res   0,(iy+DBFLAG)
    ret
 
 ksc_set:
-   set   0,(iy+QFLAGS)
+   set   0,(iy+DBFLAG)
    ret
 
 
@@ -210,9 +210,14 @@ keyShiftEnter:
    ret   z
 
    ld    a,(FNBUF)
-   cp    $9b                  ; '[.]' - nothing to do
-   ret   z
+   cp    $1b                  ; '.'
+   jr    nz,kse_notdot
 
+   ld    a,(FNBUF+1)
+   cp    $ff
+   ret   z                    ; it's <.> so return
+
+kse_notdot:
    call  acceptpanechanges    ; copy the working pane back to the source
 
    ; work out which pane to copy. we won't copy all of it, only the screen offset and data ptr.
@@ -251,6 +256,97 @@ keyShiftEnter:
 
    jp    goslow                ; slow
 
+
+;
+;
+;
+
+keyUpFast:
+   call  lolightitem
+
+   ld    hl,(SELECTION)       ; if selection is already 0 then try to move list up
+   ld    a,h
+   or    l
+   jr    z,kuf_goup
+
+   ld    hl,0                 ; else set selection to 0
+   ld    (SELECTION),hl
+   jr    kdf_cleanup
+
+   ;
+
+kuf_goup:
+   ld    hl,(TOPENTRY)        ; if topentry >= 19 then set topentry = topentry -19
+   ld    de,NUMINLIST
+   and   a
+   sbc   hl,de
+   jr    nc,kuf_ok
+
+   ld    hl,0                 ; else set topentry = 0
+
+kuf_ok:
+   ld    (TOPENTRY),hl
+   jr    kdf_cleanup
+
+
+
+
+keyDownFast:
+   call  lolightitem
+
+   ld    hl,MAXLISTIDX        ; see if selection is already at bottom of screen
+   ld    de,(SELECTION)       ; if so then there's a good chance there are more items
+   call  areequal             ; if there are fewer than maxitems in list we'll just move selection
+   jr    z,kdf_godown
+
+   ld    de,(NENTRIES)        ; set selection to last index on screen or last item, whichever is smaller
+   dec   de
+   call  smallest
+   ld    (SELECTION),hl
+   jr    kdf_cleanup
+
+
+kdf_godown:
+   ; if there are more than 19 items left to show then add 19 to topentry
+   ; if not set topentry to nentries - 19
+
+   ld    hl,(TOPENTRY)
+   ld    de,NUMINLIST
+   add   hl,de                ; hl = top + n
+   push  hl
+
+   ld    hl,(NENTRIES)
+   sbc   hl,de                ; hl = nitems - n
+   pop   de                   ; de = top + n
+   call  smallest
+   ld    (TOPENTRY),hl
+
+kdf_cleanup:
+   call  acceptpanechanges
+   call  parsefileinfo
+   call  drawlist
+   call  highlightitem
+   call  drawdirectory
+   jp    drawfile
+
+
+;
+;
+;
+
+keyUpALevel:
+   ld    a,(DIRNAME+1)        ; cheap test to see if we're at the root
+   cp    $ff
+   ret   z
+
+   ld    a,$1B                ; if not at root then fake the fnbuf to indicate 'level up'
+   ld    (FNBUF),a
+   ld    (FNBUF+1),a
+   ld    a,$ff
+   ld    (FNBUF+2),a
+   jr    ke_folder            ; and continue forward to the 'concatenate path and change dir' code
+
+
 ;
 ;
 ;
@@ -258,6 +354,11 @@ keyShiftEnter:
 keyXecute:
    set   0,(iy+XLOADFLAG)     ; requesting an ';X' on load
    jr    ke_extest
+
+
+;
+;
+;
 
 keyEnter:
    bit   4,(iy+FFLAGS)        ; is current highlighted item a folder?
@@ -297,9 +398,14 @@ ke_extest:
 
 ke_folder:
    ld    a,(FNBUF)
-   cp    $9b                  ; '[.]' - nothing to do
+   cp    $1b                  ; '.'
+   jr    nz,ke_notroot
+
+   ld    a,(FNBUF+1)
+   cp    $ff                  ; '.[]' - nothing to do
    ret   z
 
+ke_notroot:
    call  lolightitem
 
    call  updateFilePath
@@ -321,7 +427,7 @@ ke_folder:
 ;
 ;
 
-keyShiftLeftPress:
+keyLeftPane:
    bit   0,(iy+CURPANE)       ; nothing to do if already in pane 0
    ret   z
 
@@ -337,7 +443,7 @@ keyShiftLeftPress:
 ;
 ;
 
-keyShiftRightPress:
+keyRightPane:
    bit   0,(iy+CURPANE)       ; nothing to do if already in pane 1
    ret   nz
 
@@ -367,7 +473,7 @@ keyQuit:
 ;
 ;
 
-selectionUp:
+keySelectionUp:
    call  lolightitem       ; remove item highlighting
 
    ld    hl,SELECTION
@@ -390,7 +496,7 @@ su_done:
 ;
 ;
 
-selectionDown:
+keySelectionDown:
    call  lolightitem
 
    ld    hl,(SELECTION)       ; if the selection cursor is equal to num items then we can go no further
@@ -433,7 +539,7 @@ sd_done:
 
 adjustwindow:
    ld    hl,(TOPENTRY)        ; calculate the number of entries off the bottom of the pane display.
-   ld    bc,18                ; = nentries - (topentry + 19)
+   ld    bc,MAXLISTIDX        ; = nentries - (topentry + 19)
    add   hl,bc
    ld    de,(NENTRIES)
    ex    de,hl
