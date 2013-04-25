@@ -69,11 +69,14 @@ kh_mod:
 
    inc   hl                   ; last-k matches
    inc   hl
+   push  hl
    call  kh_vectorcall        ; call the updater, c will be set if we need to call the action function
+   pop   hl
    inc   hl
    inc   hl
    call  c,kh_vectorcall      ; call the action/on-press function
-   jr    kh_advance
+   pop   de
+   ret                        ; won't be any more matches
 
 kh_clearstate:
    ; last_k doesn't match this key's required value, so set state and counter to 0.
@@ -128,7 +131,6 @@ kType1:
 kType2:
    ; simple fixed rate auto-repeat
    ;
-   push  hl
    ld    a,(de)               ; get state
    ld    l,a                  ; preserve state for later comparison
    inc   a                    ; state = (state + 1) & 15.
@@ -137,12 +139,9 @@ kType2:
 
    ld    a,l                  ; if state was 0 when we appeared here then trigger the call to action
    and   a                    ; clears carry
-   jr    nz,kt2_wait
+   ret   nz
 
    ccf                        ; fire a keypress when state == 0
-
-kt2_wait:
-   pop   hl
    ret
 
 
@@ -150,8 +149,6 @@ kt2_wait:
 kType3:
    ; initial action, then delay then auto repeat
    ;
-   push  hl
-
    ld    (kt3_pt1+1),de
    ld    (kt3_done+1),de
 
@@ -179,7 +176,6 @@ kt3_not1sttime:
 
 kt3_done:
    ld    (0),hl               ; [SMC] store state and counter
-   pop   hl
    ret
 
 
@@ -217,10 +213,6 @@ keyShiftEnter:
    cp    $9b                  ; '[.]' - nothing to do
    ret   z
 
-   push  hl
-   push  bc
-   push  de
-
    call  acceptpanechanges    ; copy the working pane back to the source
 
    ; work out which pane to copy. we won't copy all of it, only the screen offset and data ptr.
@@ -257,12 +249,7 @@ keyShiftEnter:
    pop   af
    call  nz,pane2
 
-   call  goslow                ; slow
-
-   pop   de
-   pop   bc
-   pop   hl
-   ret
+   jp    goslow                ; slow
 
 ;
 ;
@@ -272,17 +259,39 @@ keyEnter:
    bit   4,(iy+FFLAGS)        ; is current highlighted item a folder?
    jr    nz,ke_folder         ; forward if so to show subfolder content
 
-   call  updateFilePath       ; otherwise execute the program
+   ld    hl,FNBUF
+   ld    a,$1B                ; '.'
+   call  findchar
+
+   ; test that the extension is dot something terminator
+
+   ret   nz                   ; no dot? no execute!
+
+   inc   hl                   ; no terminator? no execute!
+   inc   hl
+   bit   7,(hl)
+   ret   z
+
+   dec   hl                   ; examine the extension itself
+
+   ld    a,$35                ; 'P'
+   cp    (hl)
+   ret   nz
+
+   ; change to the selected directory and execute the selected file
+
+   ld    hl,DIRNAME
+   ld    a,$12                ; '>' - change to the selected directory
+   call  dircommand
+
+   ld    hl,FNBUF             ; copy the selected filename up to filepath1 and set the high bit of the name
    jp    executeprog
+
 
 ke_folder:
    ld    a,(FNBUF)
    cp    $9b                  ; '[.]' - nothing to do
    ret   z
-
-   push  hl
-   push  bc
-   push  de
 
    call  lolightitem
 
@@ -299,12 +308,7 @@ ke_folder:
    call  drawdirectory
    call  drawfile
 
-   call  goslow                ; slow
-
-   pop   de
-   pop   bc
-   pop   hl
-   ret
+   jp     goslow                ; slow
 
 ;
 ;
@@ -314,22 +318,13 @@ keyShiftLeftPress:
    bit   0,(iy+CURPANE)       ; nothing to do if already in pane 0
    ret   z
 
-   push  hl
-   push  bc
-   push  de
-
    call  acceptpanechanges
    call  lolightitem
    call  pane1
    call  parsefileinfo
    call  highlightitem
    call  drawdirectory
-   call  drawfile
-
-   pop   de
-   pop   bc
-   pop   hl
-   ret
+   jp    drawfile
 
 ;
 ;
@@ -343,22 +338,14 @@ keyShiftRightPress:
    and   a
    ret   z                    ; quit if dirname is not yet set
 
-   push  hl
-   push  bc
-   push  de
-
    call  acceptpanechanges
    call  lolightitem
    call  pane2
    call  parsefileinfo
    call  highlightitem
    call  drawdirectory
-   call  drawfile
+   jp    drawfile
 
-   pop   de
-   pop   bc
-   pop   hl
-   ret
 
 ;
 ;
@@ -374,9 +361,6 @@ keyQuit:
 ;
 
 selectionUp:
-   push  hl
-   push  bc
-   push  de
    call  lolightitem       ; remove item highlighting
 
    ld    hl,SELECTION
@@ -393,21 +377,13 @@ su_done:
    call  acceptpanechanges
    call  highlightitem
    call  parsefileinfo
-   call  drawfile
-
-   pop   de
-   pop   bc
-   pop   hl
-   ret
+   jp    drawfile
 
 ;
 ;
 ;
 
 selectionDown:
-   push  hl
-   push  bc
-   push  de
    call  lolightitem
 
    ld    hl,(SELECTION)       ; if the selection cursor is equal to num items then we can go no further
@@ -443,14 +419,48 @@ sd_done:
    call  acceptpanechanges
    call  highlightitem
    call  parsefileinfo
-   call  drawfile
-
-   pop   de
-   pop   bc
-   pop   hl
-   ret
+   jp    drawfile
 
 
+
+
+adjustwindow:
+   ld    hl,(TOPENTRY)        ; calculate the number of entries off the bottom of the pane display.
+   ld    bc,18                ; = nentries - (topentry + 19)
+   add   hl,bc
+   ld    de,(NENTRIES)
+   ex    de,hl
+   sbc   hl,de                ; carry will be clear from previous addition
+   jr    nc,aw_nover
+   ld    hl,0                 ; 0 items remaining off-screen
+aw_nover:
+   ld    a,h
+   or    l
+   ret   nz                   ; nothing to do if there are items off the bottom of the pane
+
+   ; we now know there's nothing off the bottom
+
+   ld    hl,(TOPENTRY)        ; are there are any items off the top?
+   ld    a,h
+   or    l
+   jr    z,aw_trybot
+
+   ld    hl,TOPENTRY          ; shuffle list down from the top
+   jp    decINZ
+
+aw_trybot:
+   ; we now know there's nothing above and nothing below.
+
+   ; if the cursor is on the bottom item then move it up else do nothing
+
+   ld    hl,(NENTRIES)
+   ld    de,(SELECTION)
+   and   a
+   sbc   hl,de
+   ret   nz
+
+   ld    hl,SELECTION         ; move selection up
+   jp    decINZ
 
 
 
@@ -460,9 +470,6 @@ keyDelete:
    cp    $1b                  ; '.'
    ret   z
 
-   push  hl
-   push  bc
-   push  de
    call  lolightitem
 
    ld    hl,DIRNAME           ; copy the current directory name to FILEPATH1
@@ -479,25 +486,18 @@ keyDelete:
 
    call  reloaddir
    call  acceptpanechanges
+   call  adjustwindow
    call  drawlist
-   ld    hl,SELECTION      ; decrement the selected item so we're not off the end of the list
-   call  decINZ
    call  highlightitem
    call  parsefileinfo
    call  drawdirectory
    call  drawfile
 
-   call  goslow
+   jp    goslow
 
-   pop   de
-   pop   bc
-   pop   hl
-   ret
-
-
-
-
-
+;
+;
+;
 
 
 keyCopy:
@@ -511,15 +511,11 @@ keyCopy:
 
    ; TODO quit if source and dest names are the same?
 
-   push  hl
-   push  bc
-   push  de
-
    ld    hl,$4000             ; source file too big?
    ld    de,(FLEN)
    and   a
    sbc   hl,de
-   jp    c,ksc_quit
+   ret   c
 
    call  lolightitem
 
@@ -571,38 +567,7 @@ keyCopy:
    call  drawdirectory
    call  drawfile
 
-   call  $207              ; really slow
-
-ksc_quit:
-   pop   de
-   pop   bc
-   pop   hl
-   ret
-
-;
-;
-;
-
-rename:
-   ; concatenate the paths using a semicolon
-   ;
-   ld    hl,FILEPATH1
-   call  findend
-   ld    a,$19             ; ';'
-   ld    (hl),a
-   inc   hl
-   ld    de,FILEPATH2
-   ex    de,hl
-   call  copystrTHB
-
-   ld    de,FILEPATH1
-   call  api_sendstring
-
-   ld    bc,$8007             ; execute rename command
-   ld    a,$e0
-   out   (c),a
-
-   jp    api_responder
+   jp    $207              ; really slow
 
 ;
 ;
@@ -615,12 +580,6 @@ keyMove:
    ld    a,(PANE2DATA+pnDIRNAME)
    and   a
    ret   z                    ; if pane 2 hasn't got a directory set then quit
-
-   ; TODO quit if source and dest names are the same?
-
-   push  hl
-   push  bc
-   push  de
 
    call  lolightitem
 
@@ -643,21 +602,23 @@ keyMove:
    call  gofast
 
    call  rename
+   cp    $40
+   jr    nz,km_error
+
+   ld    hl,NENTRIES       ; eeew, but necessary - need to check for errors though!!
+   call  decINZ
+   call  adjustwindow
+   call  acceptpanechanges
 
    call  reloadpanes
-   ld    hl,SELECTION      ; decrement the selected item so we're not off the end of the list
-   call  decINZ
+
+km_error:
    call  highlightitem
    call  parsefileinfo
    call  drawdirectory
    call  drawfile
 
-   call  goslow
-
-   pop   de
-   pop   bc
-   pop   hl
-   ret
+   jp    goslow
 
 ;
 ;
@@ -668,9 +629,6 @@ keyRename:
    cp    $1b                  ; '.'
    ret   z
 
-   push  hl
-   push  bc
-   push  de
    call  lolightitem
 
    ld    hl,DIRNAME
@@ -701,17 +659,25 @@ keyRename:
    pop   hl
    ld    a,c
    sub   l
-   push  af                   ; z flag will be clear if we changed directories
+   ld    (DMFLAG),a
 
    call  gofast
 
    call  rename
+   cp    $40
+   jr    nz,kr_aborted        ; do nothing if this failed
 
+   ld    a,(DMFLAG)           ; did the file change folders? don't adjust selection if not
+   and   a
+   jr    z,kr_onlyreload
+
+   ld    hl,NENTRIES          ; eeew, but necessary - need to check for errors though!!
+   call  decINZ
+   call  adjustwindow
+   call  acceptpanechanges
+
+kr_onlyreload:
    call  reloadpanes
-
-   pop   af                   ; if the file moved, then move cursor up
-   ld    hl,SELECTION
-   call  nz,decINZ
 
 kr_aborted:
    call  unbottombox
@@ -720,21 +686,14 @@ kr_aborted:
    call  drawdirectory
    call  drawfile
 
-   call  goslow
+   jp    goslow
 
-   pop   de
-   pop   bc
-   pop   hl
-   ret
 
 ;
 ;
 ;
 
 keyCreatedir:
-   push  hl
-   push  bc
-   push  de
    call  lolightitem
 
    call  bottombox
@@ -749,6 +708,8 @@ keyCreatedir:
    ld    (hl),$ff
    call  editbuffer
    jr    z,kk_aborted
+
+   ; TODO - refactor to use dircom
 
    ld    hl,FILEPATH1         ; concatenate the pane's directory and our new directory name
    ld    (hl),$15             ; '+'
@@ -781,22 +742,13 @@ kk_aborted:
    call  drawdirectory
    call  drawfile
 
-   call  goslow
-
-   pop   de
-   pop   bc
-   pop   hl
-   ret
+   jp    goslow
 
 ;
 ;
 ;
 
 keyHelp:
-   push  hl
-   push  bc
-   push  de
-
    set   7,(iy+PRINTMOD)
    call  cls
    call  helpscreen
@@ -818,9 +770,4 @@ khl_wait1:
    cp    $ff
    jr    z,khl_wait1
 
-   call  drawscreen
-
-   pop   de
-   pop   bc
-   pop   hl
-   ret
+   jp   drawscreen

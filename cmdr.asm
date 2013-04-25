@@ -1,5 +1,5 @@
 ;;
-;; Compile with "tasm -80 -b main.asm swaparama.p"
+;; Compile with "tasm -80 -b cmdr.asm cmdr.p"
 ;;
 
 ; A useful reference
@@ -72,6 +72,8 @@ api_xfer       .equ $1ffc
 api_rdjoy      .equ $1ffe
 
 
+; TODO - dot to move up a directory level?
+
 
          org   $4009
 
@@ -82,6 +84,7 @@ api_rdjoy      .equ $1ffe
 
 ;; STARTS HERE ;)
 
+; TODO - fix . / .. confusion. 
 
 starthere:
    xor   a
@@ -90,9 +93,7 @@ starthere:
    ld    (iy+PRINTMOD),a
    ld    (iy+KBSTATE),a
 
-   ld    bc,$e007                ; go high; RAM at 16-48k
-   ld    a,$b3
-   out   (c),a
+   call   memhigh                ; ram at 16-48k
 
    ; convert the ascii source to zeddy strings
    ;
@@ -331,8 +332,8 @@ hl_action:
    ld    (hl),a
    inc   hl
    djnz  hli_loop
-   ret
 
+   ret
 
 
 
@@ -797,32 +798,104 @@ fillmem:
 
 
 
-; load and run a program 
+; hl points to ff-terminated directory name string
+; A holds command
 ;
-executeprog:
-   ld    bc,$e007             ; ensure RAM is paged LOW on zxpand
+dircommand:
+   ld    de,FILEPATH1
+   push  de
+   ld    (de),a
+   inc   de
+   call  copystrTHB
+   pop   de
+   call  api_sendstring
+
+   ld    bc,$6007             ; open dir, which will interpret '+' command and create the directory
+   ld    a,0
+   out   (c),a
+   call  api_responder
+
+   cp    $40                  ; $40 = all good, else error. error rtn will fix up stack.
+   ret   z
+   jp    error
+
+
+memhigh:
+   ld    a,$b3
+   jr    memwind
+
+memlow:
    ld    a,$b2
+
+memwind:
+   ld    bc,$e007             ; set RAM page window on zxpand
    out   (c),a
 
+   ld    a,$ff                ; delay some time to allow paging. i'm surprised it takes this long but it does.
+ep_wait:
+   ex    (sp),hl
+   ex    (sp),hl
+   dec   a
+   jr    nz,ep_wait
+   ret
+   
+
+; load and run a program with name stored in HL
+;
+executeprog:
+   ld    de,FILEPATH1
+   call  copystrTHB
+
+   call   memlow              ; ram at 8-40k
+   
    call  $02e7                ; go fast - don't use proxy as we really really do need to disable nmis at this point
 
    ld    hl,ep_start          ; move code to 8K and jump there
    ld    de,$2000
    ld    bc,ep_end-ep_start
    ldir
+
    jp    $2000
 
 ep_start:
-   ld    hl,DIRNAME           ; create a high-bit terminated copy of DIRNAME as expected by sendstring
    ld    de,FILEPATH1
-   call  copystrTHB
    xor   a
    call  api_fileop
 
-   ld    hl,($4002)           ; we can't return to the old program now, so clean up the stack
+   ld    hl,(ERR_SP)          ; we can't return to the old program now, so clean up the stack
    ld    sp,hl
+   ld    hl,$676
+   push  hl
    jp    $0207                ; return to BASIC via SLOW/FAST
 ep_end:
+
+
+
+rename:
+   ; concatenate the paths using a semicolon
+   ;
+   ld    hl,FILEPATH1
+   call  findend
+   ld    a,$19             ; ';'
+   ld    (hl),a
+   inc   hl
+   ld    de,FILEPATH2
+   ex    de,hl
+   call  copystrTHB
+
+   ld    de,FILEPATH1
+   call  api_sendstring
+
+   ld    bc,$8007             ; execute rename command
+   ld    a,$e0
+   out   (c),a
+
+   jp    api_responder
+
+;
+;
+;
+
 
 
 
@@ -1299,13 +1372,15 @@ keyStates:
 
 
 
-
 ; info about the current highlighted item
 ;
 FNBUF:
    ds    16
 FLEN:
    dw    0
+DMFLAG:
+   db    0
+
 
 
 ; all strings which need converting go here.
@@ -1360,7 +1435,7 @@ helpstr8:
    dt    "PRESS A KEY"
    db    $ff
 helpstrV:
-   dt    "VERSION 1.0"
+   dt    "VERSION 1.1"
    db    $ff
 helpstrX:
    dt    " "
