@@ -3,6 +3,14 @@
 ; ================= Dec 2012, Krystian 'Tygrys' Wlosek
 ; www.speccy.pl
 
+; error definition related to errors messages from cmdr.asm
+
+BMPERROR_NOBMPFILE			.equ	16 ; no bmp file
+BMPERROR_WRONGBITMAP		.equ	17 ; bitmap type
+BMPERROR_WRONGCOMPRESSION	.equ	18 ; compressed data!
+BMPERROR_WRONGWIDTH			.equ	19
+BMPERROR_WRRONGHEIGHT		.equ	20
+
 
 bmpviewer:
     ld    hl,DIRNAME
@@ -23,12 +31,17 @@ bmpviewer:
 
     ; check bmp signature
     call bmp_checksignature
-    ret    nz ; oops, it's not a bmp file
+	jr	z,_bmpviwer_step2
 
+	; oops, it's not a bmp file
+	ld	a,BMPERROR_NOBMPFILE
+	jr	bmp_errorhandler
+
+_bmpviwer_step2:
 	; check other params and restrictions
     call bmp_checksize
     or    a
-    ret    nz ; something goes wrong
+    jr    nz,bmp_errorhandler ; something goes wrong
 
     call  clshr   ; clear HR buffer in case image is smaller
 
@@ -47,6 +60,10 @@ _bmpviewer_keys:
         call    reloaddir
 	ret
 
+bmp_errorhandler:
+	; this is good usage?
+	jp	errorhandler
+;	ret
 
 ; check 'BM' signature
 bmp_checksignature:
@@ -69,7 +86,7 @@ bmp_checksize:
     ld    d,(hl) ; in DE type of bitmap
     ld    a,1 ; we accept type 1
     cp    e
-    ld    a,4 ; ERROR_WRONGBITMAP
+    ld    a,BMPERROR_WRONGBITMAP ; ERROR_WRONGBITMAP
     ret    nz
 
     inc    hl
@@ -78,7 +95,7 @@ bmp_checksize:
     ld d,(hl) ; type of compression
     ld a,e
     or d
-    ld a,5 ; ERROR_WRONGCOMPRESSION
+    ld a,BMPERROR_WRONGCOMPRESSION ; ERROR_WRONGCOMPRESSION
     ret    nz
     ld    hl,(bmp_address)
     ld    de,18 ; width
@@ -95,13 +112,13 @@ bmp_checksize:
     ; D should be 0
     ld    a,d
     or    a
-    ld    a,2 ; error = wrong size Width
+    ld    a,BMPERROR_WRONGWIDTH ; error = wrong size Width
     ret    nz
 
     ld    a,e
     cp    33 ; not much than 256pixels
 
-    ld    a,2
+    ld    a,BMPERROR_WRONGWIDTH
     ret    nc
 
     ld    a,e
@@ -122,7 +139,7 @@ bmp_checksize:
 
     ld    a,e
     cp    193 ; max 192 lines
-    ld    a,3
+    ld    a,BMPERROR_WRRONGHEIGHT
     ret    nc ; too big
 
     ld    a,e

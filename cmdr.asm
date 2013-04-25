@@ -167,7 +167,7 @@ errorhandler:
    ret
 
 eh_error:
-   and   $0f
+   and   $1f ; extend error numbers to 31
    call  geterror
    push  hl
    ld    bc,$0a00
@@ -1697,7 +1697,13 @@ errorstrings:
    dw    error00, error01, error02, error03, error04
    dw    error05, error06, error07, error08, error09
    dw    error10, error11, error12, error13, error14
-
+   dw    error15
+   ; BMP errors
+   dw	 error16, error17, error18, error19, error20
+   ; unused errors
+   dw	 error21, error22, error23, error24, error25
+   dw	 error26, error27, error28, error29, error30
+   dw    error31
 
 
 ; all strings which need converting go here.
@@ -1725,7 +1731,7 @@ titlestr:
 ;         --------========--------========
    dt    "        ZXPAND-COMMANDER        "
    db    $ff
-   dt    "VERSION 1.7 SP1"
+   dt    "VERSION 1.7 SP2"
    db    $ff
    db    $0d
    dt    "CURSOR KEYS - MOVE SELECTION"
@@ -1811,6 +1817,37 @@ error14:
 error15:
    dt    "TIMEOUT"
    db    $ff
+
+; BMP errors
+error16:
+	dt	"NO BMP FILE" 
+	db	$ff
+error17:
+	dt	"UNSUPPORTED BITMAP TYPE"
+	db	$ff
+error18:
+	dt	"UNSUPPORTED BMP COMPRESSION"
+	db	$ff
+error19:
+	dt	"UNSUPPORTED BMP WIDTH"
+	db	$ff
+error20:
+	dt	"UNSUPPORTED BMP HEIGTH"
+	db	$ff
+; unused ERRORS from 21 to 31
+error21:
+error22:
+error23:
+error24:
+error25:
+error26:
+error27:
+error28:
+error29:
+error30:
+error31:
+	dt	"UNEXPECTED ERROR"
+	db	$ff
 
 renamestr:
    dt    "RENAME"
