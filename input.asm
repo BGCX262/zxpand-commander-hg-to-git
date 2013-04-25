@@ -1,5 +1,12 @@
 
 
+waitnokey:
+   call  $2bb           ; kscan - loop while a key is already pressed
+   inc   l
+   jr    nz,waitnokey
+   ret
+
+
 waitforkey:
    call  $2bb           ; kscan - loop while a key is already pressed
    inc   l
@@ -19,6 +26,8 @@ gk_wait:
    ret   z              ; space
    cp    $77
    ret   z              ; rubout
+   cp    $76
+   ret   z              ; return
 
    cp    $0b            ; exclude gfx/multibyte chars
    jr    c,gk_wait
@@ -122,7 +131,7 @@ eb_loop:
    jr    z,eb_exit
 
    call  printa               ; add the character
-   ; todo - cap the length
+   ; todo - cap the length?
    jr    eb_loop
 
 

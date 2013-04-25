@@ -54,7 +54,8 @@ PANEWENDx    .equ  $6f00
 PANEDATALEN .equ  PANEWENDx-PANEW
 PANE1DATA   .equ  $6e00
 PANE2DATA   .equ  $6d80
-
+BBDEST      .equ  $6d00
+UPBUF       .equ  $6c00
 
 ; wait for long command to finish, a has response code on return
 ;
@@ -87,6 +88,7 @@ api_rdjoy      .equ $1ffe
 
 ;; STARTS HERE ;)
 
+
 starthere:
    xor   a
    ld    (iy+CURPANE),a
@@ -103,24 +105,26 @@ starthere:
    ld    hl,stringsforconversion
    call  inplaceconvert
 
+   ; prevent re-entry if the program is run twice
+   ;
    ld    a,$c9                   ; RET
-   ld    (inplaceconvert),a      ; prevent re-entry if the program is run twice
+   ld    (inplaceconvert),a
 
    call  titlescreen             ; reset FRAMES so we can count the time easily
    call  waitsync                ; it counts down, but zero crossings 'adversely affect operation of the machine' :¬.
-   ld    hl,$ff48                ; set the lsb to the time to wait, then check that the msb is no longer $ff
+   ld    hl,$ff40                ; set the lsb to the time to wait, then check that the msb is no longer $ff
    ld    (FRAMES),hl
 
    call  initpanedata
 
    ; load and display PANE1 data
-
+   ;
    call  pane1                   ; copy pane 1 info into working block
    call  loaddir                 ; updates working block
    call  acceptpanechanges       ; copy updated info in working pane back to the originator
 
 introdelay:
-   call  waitsync                ; wait for approx 3 seconds, or continue immediately if the load took longer than that
+   call  waitsync                ; wait until timeout expires, or continue immediately if the load took longer than that
    ld    a,(FRAMES+1)
    cp    $ff
    jr    z,introdelay
@@ -135,8 +139,46 @@ mainloop:
 
 
 
-; ------------------------------------------------------------
 
+
+
+
+
+; ------------------------------------------------------------
+; if A is not RT_OK then pop open a window showing the error
+; text. wait for a key and clear up.
+;
+; on return carry indicates error state
+;
+errorhandler:
+   cp    $40
+   jr    nz,eh_error
+
+   and   a
+   ret
+
+eh_error:
+   and   $0f
+   call  geterror
+   push  hl
+   ld    bc,$0a00
+   call  box
+   pop   hl
+   ld    bc,$0b00
+   call  centrestring
+   call  invertscreen
+   call  invertscreen
+   call  invertscreen
+   call  invertscreen
+   call  waitforkey
+   call  unbox
+   call  waitnokey
+   and   a
+   ccf
+   ret
+
+
+; ------------------------------------------------------------
 ; load directory content to memory. directory is stored in DIRNAME,
 ; target memory address in DATAPTR
 ;
@@ -151,7 +193,7 @@ reloaddir:
    call  clearmem
 
    ld    hl,DIRNAME           ; create a high-bit terminated copy of DIRNAME as expected by sendstring
-   ld    de,FILEPATH1
+   ld    de,UPBUF
    call  copystrTHB
    call  api_sendstring
 
@@ -160,8 +202,8 @@ reloaddir:
    out   (c),a
    call  api_responder
 
-   cp    $40                  ; $40 = all good, else error. error rtn will fix up stack.
-   jp    nz,error
+   call  errorhandler
+   ret   c
 
    ld    de,0
    ld    (NENTRIES),de
@@ -177,8 +219,8 @@ ld_findnext:
    cp    $3f                  ; done?
    ret   z
 
-   and   $3f                  ; error?
-   jp    nz,error
+   call  errorhandler
+   ret   c
 
    ld    l,16                 ; 12b'name + 1b'flags + 3b'length
    xor   a
@@ -303,6 +345,7 @@ pfi_done:
    ret
 
 
+; ------------------------------------------------------------
 
 
 ; remove item highlighting
@@ -311,6 +354,7 @@ lolightitem:
    ld    hl,$7fe6             ; AND $7F
    ld    (hl_action),hl
    jr    hli_go
+
 
 ; highlight the selected item on screen
 ;
@@ -339,7 +383,9 @@ hl_action:
 
 
 
-; -PANE-DATA-HANDLING----------------------------------------------------------
+; ------------------------------------------------------------
+; -PANE-DATA-HANDLING-----------------------------------------
+; ------------------------------------------------------------
 
 
 
@@ -365,6 +411,9 @@ initpanedata:
    ret
 
 
+; ------------------------------------------------------------
+
+
 ; copy content of pane 1 info block into working area
 ;
 pane1:
@@ -375,6 +424,7 @@ pane1:
 ;
 pane2:
    set   0,(iy+CURPANE)
+
 
 ; copy content of pane info block, in hl, into working area
 ;
@@ -394,6 +444,8 @@ ipw_copy:
    ret
 
 
+; ------------------------------------------------------------
+
 
 p1reload:
    call  pane1
@@ -409,6 +461,8 @@ p2r_action:
 
 
 
+; ------------------------------------------------------------
+
 
 reloadpanes:
    ld    a,(iy+CURPANE)
@@ -423,6 +477,8 @@ reloadpanes:
    jp    pane1
 
 
+; ------------------------------------------------------------
+
 
 
 ; given the pane ID in A get its data pointer
@@ -433,6 +489,9 @@ getpaneptr:
    ret   nz
    ld    hl,PANE1DATA
    ret
+
+
+; ------------------------------------------------------------
 
 
 ; copy updated working data back to the parent pane info block
@@ -447,6 +506,8 @@ acceptpanechanges:
    ret
 
 
+; ------------------------------------------------------------
+
 
 ; take dirname and add the currently selected filename
 ;
@@ -456,6 +517,7 @@ createfilepath:
    ldir
    pop   hl
    jp    updatefilenamebuffer
+
 
 
 ; update the working block's path data using the path in the filename buffer.
@@ -510,6 +572,10 @@ ufp_toroot:
 
 
 
+; ------------------------------------------------------------
+
+
+
 getscroffs:
    push  bc
    ld    bc,(SCROFFS)
@@ -546,6 +612,7 @@ drawscreen:
    jp    drawfile
 
 
+; ------------------------------------------------------------
 
 
 cleartoeol:
@@ -557,7 +624,11 @@ clr_untileol:
 
 
 
+; ------------------------------------------------------------
 
+
+; draw information about the current selected directory
+;
 drawdirectory:
    set   7,(iy+PRINTMOD)      ; restore normal print mode
    ld    bc,$1600             ; set print position at the lower text line
@@ -577,6 +648,11 @@ drawdirectory:
    ret
 
 
+; ------------------------------------------------------------
+
+
+; draw information about the current selected file
+;
 drawfile:
    set   7,(iy+PRINTMOD)      ; restore normal print mode
    ld    bc,$1700             ; set print position at the lower text line
@@ -601,11 +677,22 @@ drawfile:
    ld    hl,bytesstr
    call  printstring
 
+   bit   0,(iy+FFLAGS)        ; bit 0 is set for a read-only file
+   jr    z,df_done
+
+   ld    bc,$1711
+   call  pr_pos
+   ld    a,$37                ; 'R'
+   call  printa
+   ld    a,$34                ; 'O'
+   call  printa
+
 df_done:
    res   7,(iy+PRINTMOD)      ; restore normal print mode
    ret
 
 
+; ------------------------------------------------------------
 
 
 sidebars:
@@ -647,6 +734,8 @@ cl_loop:
    jr    nz,cl_loop
    ret
 
+; ------------------------------------------------------------
+
 
 ; draw 64 spaces
 ;
@@ -660,9 +749,12 @@ sp_loop:
    pop   bc
    ret
 
+
 ; ------------------------------------------------------------
 
-error:
+; return to basic, do not pass go, do not collect £200
+;
+errorhard:
    ld    hl,(ERR_SP)
    ld    sp,hl
 
@@ -676,7 +768,11 @@ error_t:
 
 
 
+;---------------------------------------------------------------------------
 ; -STRING-HANDLING----------------------------------------------------------
+;---------------------------------------------------------------------------
+
+
 
 ; search a high-bit-terminated string for the given character. Will not match the last character.
 ; return with Z set if found
@@ -690,6 +786,9 @@ findchar:
    jr    findchar
 
 
+; ------------------------------------------------------------
+
+
 ; search back through memory for given character. It must exist!
 ;
 rfindchar:
@@ -698,6 +797,8 @@ rfindchar:
    dec   hl
    jr    rfindchar
 
+
+; ------------------------------------------------------------
 
 
 ; search for the last character in an ff-terminated string
@@ -708,6 +809,9 @@ findend:
    ret   nz
    inc   hl
    jr    findend
+
+
+; ------------------------------------------------------------
 
 
 
@@ -721,6 +825,10 @@ copystring:
    inc   hl
    inc   de
    jr    copystring
+
+
+
+; ------------------------------------------------------------
 
 
 
@@ -739,6 +847,7 @@ copystrTHB:
    ret
 
 
+; ------------------------------------------------------------
 
 
 ; count the number of occurrences of the character code in A
@@ -758,6 +867,7 @@ ct_next:
    jr    ct_next
 
 
+; ------------------------------------------------------------
 
 
 ; return length, in chars, of an ff-terminated string in register C
@@ -780,6 +890,8 @@ sl_next:
    jr    sl_loop
 
 
+; ------------------------------------------------------------
+
 
 ; clear memory to 0 - specialisation of fill mem
 ;
@@ -800,32 +912,77 @@ fillmem:
 
 
 
+; ------------------------------------------------------------
+; -ZXPANDY-STUFF----------------------------------------------
+; ------------------------------------------------------------
+
+
+; hl = filename, ff terminated
+; returns with z set if file exists and is writable
+;
+filewritable:
+   ld    a,1
+   call  fc_entry
+   cp    $40
+   ret   nz
+   push  af
+   ld    a,$80
+   call  fc_cmd
+   pop   af
+   ret
+
+; hl = filename, ff terminated
+; returns with z set if file exists
+;
+fileexists:
+   xor   a
+
+
+fc_entry:
+   push  af
+   ld    de,UPBUF
+   call  copystrTHB
+   call  api_sendstring
+   pop   af
+fc_cmd:
+   ld    bc,$8007
+   out   (c),a
+   call  api_responder
+   cp    $40
+   ret
+
+
+; ------------------------------------------------------------
+
+
 ; hl points to ff-terminated directory name string
 ; A holds command
 ;
 dircommand:
    ld    de,FILEPATH1
-   push  de
    ld    (de),a
    inc   de
    call  copystrTHB
-   pop   de
+   dec   de
    call  api_sendstring
 
    ld    bc,$6007             ; open dir, which will interpret '+' command and create the directory
    ld    a,0
    out   (c),a
-   call  api_responder
-
-   cp    $40                  ; $40 = all good, else error. error rtn will fix up stack.
-   ret   z
-   jp    error
+   jp    api_responder
 
 
+; ------------------------------------------------------------
+
+
+; set memory map to 16-48k
+;
 memhigh:
    ld    a,$b3
    jr    memwind
 
+; set memory map to 8-40k
+;
 memlow:
    ld    a,$b2
 
@@ -840,7 +997,10 @@ ep_wait:
    dec   a
    jr    nz,ep_wait
    ret
-   
+
+
+; ------------------------------------------------------------
+
 
 ; load and run a program with name stored in HL
 ;
@@ -883,8 +1043,12 @@ ep_start:
    jp    api_fileop           ; go loader!
 ep_end:
 
+; ------------------------------------------------------------
 
 
+; create a rename string from paths in FILEPATH1 & 2, perform the action
+; return with A = error code or $40 if success
+;
 rename:
    ; concatenate the paths using a semicolon
    ;
@@ -906,9 +1070,14 @@ rename:
 
    jp    api_responder
 
-;
-;
-;
+
+
+
+
+
+; ------------------------------------------------------------
+; -STUFF------------------------------------------------------
+; ------------------------------------------------------------
 
 
 
@@ -923,6 +1092,7 @@ ws_loop:
    jr    z,ws_loop
    ret
 
+; ------------------------------------------------------------
 
 
 gofast:
@@ -934,6 +1104,7 @@ goslow:
    ret
    jp    $207
 
+; ------------------------------------------------------------
 
 
 ; move the conversion data to a location where the LSB is 0.
@@ -974,6 +1145,37 @@ ipc_store:
 ; ------------------------------------------------------------
 ; -SCREEN-IO--------------------------------------------------
 ; ------------------------------------------------------------
+
+invertscreen:
+   ld    hl,(D_FILE)
+   ld    bc,32*24
+
+iv_loop:
+   inc   hl
+   ld    a,(hl)
+   cp    $76
+   jr    z,iv_loop
+   xor   $80
+   ld    (hl),a
+   dec   bc
+   ld    a,b
+   or    c
+   jr    nz,iv_loop
+   ret
+
+
+; enter with B indicating line number
+; hk points to string
+;
+centrestring:
+   call  strlen
+   ld    a,$20
+   sub   c
+   rra
+   ld    c,a
+   call  pr_pos
+   jr    printstring
+
 
 iprintstringat:
    set   7,(iy+PRINTMOD)
@@ -1187,9 +1389,39 @@ ks_out:
    ret
 
 
+preservescreen:
+   push  hl
+   push  bc
+   push  de
+   ld    hl,(SCR_POS)
+   ld    (BBDEST),hl
+   ld    de,BBDEST+2
+   ld    bc,33*3
+   ldir
+   pop   de
+   pop   bc
+   pop   hl
+   ret
+
+unbox:
+   push  hl
+   push  bc
+   push  de
+   ld    hl,BBDEST+2
+   ld    de,(BBDEST)
+   ld    bc,33*3
+   ldir
+   pop   de
+   pop   bc
+   pop   hl
+   ret
+
+
 bottombox:
    ld    bc,$1500
+box:
    call  pr_pos
+   call  preservescreen
    ld    a,7
    call  printa
    ld    a,3
@@ -1197,7 +1429,6 @@ bottombox:
    call  printna
    ld    a,132
    call  printa
-
    ld    a,5
    call  printa
    ld    a,0
@@ -1205,33 +1436,12 @@ bottombox:
    call  printna
    ld    a,128+5
    call  printa
-
    ld    a,128+2
    call  printa
    ld    a,128+3
    ld    b,30
    call  printna
    ld    a,128+1
-   jp    printa
-
-
-
-unbottombox:
-   ld    bc,$1500
-   call  pr_pos
-   ld    a,5
-   call  printa
-   ld    a,0
-   ld    b,14
-   call  printna
-   ld    a,128+5
-   call  printa
-   ld    a,5
-   call  printa
-   ld    a,0
-   ld    b,14
-   call  printna
-   ld    a,128+5
    jp    printa
 
 
@@ -1266,13 +1476,7 @@ helpscreen:
    ld    bc,$0100
 
 hs_loop:
-   call  strlen
-   ld    a,$20
-   sub   c
-   rra
-   ld    c,a
-   call  pr_pos
-   call  printstring
+   call  centrestring
    inc   hl                   ; skip string terminator
    inc   b
 
@@ -1285,6 +1489,22 @@ hs_loop:
    inc   b                    ; $76 = extra newline
    inc   hl
    jr    hs_loop
+
+
+
+geterror:
+   ld    hl,errorstrings
+   push  hl
+   sla   a
+   call  stkAdd8
+   pop   hl
+   ld    (ge_addr+1),hl
+   nop
+   nop
+ge_addr:
+   ld    hl,(0)
+   ret
+
 
 
 
@@ -1366,7 +1586,7 @@ keyStates:
    .dw   kType1
    .dw   keyCreatedir
 
-   .dw   $fa7f             ; up a level [.]
+   .dw   $fb7f             ; up a level [.]
    .db   0,0
    .dw   kType1
    .dw   keyUpALevel
@@ -1412,6 +1632,12 @@ DMFLAG:
    db    0
 
 
+errorstrings:
+   dw    error00, error01, error02, error03, error04
+   dw    error05, error06, error07, error08, error09
+   dw    error10, error11, error12, error13, error14
+
+
 
 ; all strings which need converting go here.
 ; no other data please, just the strings
@@ -1438,7 +1664,7 @@ titlestr:
 ;         --------========--------========
    dt    "        ZXPAND-COMMANDER        "
    db    $ff
-   dt    "VERSION 1.4"
+   dt    "VERSION 1.5"
    db    $ff
    db    $0d
    dt    "CURSOR KEYS - MOVE SELECTION"
@@ -1475,6 +1701,55 @@ titlestr:
    dt    "PRESS A KEY"
    db    $ff
    db    $1b
+
+error00:
+   dt    "OK"
+   db    $ff
+error01:
+   dt    "DISK ERROR"
+   db    $ff
+error02:
+   dt    "INTERNAL ERROR"
+   db    $ff
+error03:
+   dt    "DEVICE NOT READY"
+   db    $ff
+error04:
+   dt    "NO FILE"
+   db    $ff
+error05:
+   dt    "NO PATH"
+   db    $ff
+error06:
+   dt    "INVALID NAME"
+   db    $ff
+error07:
+   dt    "ACCESS DENIED"
+   db    $ff
+error08:
+   dt    "FILE EXISTS"
+   db    $ff
+error09:
+   dt    "INVALID OBJECT"
+   db    $ff
+error10:
+   dt    "WRITE PROTECTED"
+   db    $ff
+error11
+   dt    "INVALID DRIVE"
+   db    $ff
+error12:
+   dt    "NOT ENABLED"
+   db    $ff
+error13:
+   dt    "NO FILESYSTEM"
+   db    $ff
+error14:
+   dt    "MKFS ABORTED"
+   db    $ff
+error15:
+   dt    "TIMEOUT"
+   db    $ff
 
 renamestr:
    dt    "RENAME"

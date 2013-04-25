@@ -392,6 +392,9 @@ ke_extest:
    ld    a,$12                ; '>' - change to the selected directory
    call  dircommand
 
+   call  errorhandler
+   ret   c
+
    ld    hl,FNBUF             ; copy the selected filename up to filepath1 and set the high bit of the name
    jp    executeprog
 
@@ -595,6 +598,7 @@ keyDelete:
    ld    a,1
    call  api_fileop
    call  api_responder
+   call  errorhandler         ; do nothing after an error
 
    call  gofast
 
@@ -651,6 +655,24 @@ keyCopy:
    add   hl,de
    ld    de,FILEPATH2
    call  createfilepath       ; filepath2 contains destination pane directory plus filename
+
+   push  hl
+
+   ld    hl,FILEPATH2
+   call  fileexists           ; is destination file there?
+   jr    nz,kc_continue
+
+   ld    hl,FILEPATH2
+   call  filewritable         ; is destination file writable? (doesn't exist/o-mode is non-zero)
+   jr    z,kc_continue
+
+   pop   hl
+   ld    a,8
+   call  errorhandler
+   jr    kc_err
+
+kc_continue:
+   pop   hl
    ld    de,deststr
    ex    de,hl
    call  copystring           ; left pointing to the $ff byte. replace this with the size
@@ -666,13 +688,18 @@ keyCopy:
    ld    de,FILEPATH1
    xor   a
    call  api_fileop
+   call  errorhandler
+   jr    c,kc_err
 
    ld    de,FILEPATH2
    ld    a,$ff
    call  api_fileop
+   call  errorhandler
+   jr    c,kc_err
 
    ; reload data for both panes - it's been trashed.
 
+kc_err:
    call  acceptpanechanges
 
    call  reloadpanes
@@ -716,10 +743,10 @@ keyMove:
    call  gofast
 
    call  rename
-   cp    $40
-   jr    nz,km_error
+   call  errorhandler
+   jr    c,km_error
 
-   ld    hl,NENTRIES       ; eeew, but necessary - need to check for errors though!!
+   ld    hl,NENTRIES       ; eeew, but necessary
    call  decINZ
    call  adjustwindow
    call  acceptpanechanges
@@ -778,8 +805,8 @@ keyRename:
    call  gofast
 
    call  rename
-   cp    $40
-   jr    nz,kr_aborted        ; do nothing if this failed
+   call  errorhandler
+   jr    c,kr_aborted        ; do nothing if this failed
 
    ld    a,(DMFLAG)           ; did the file change folders? don't adjust selection if not
    and   a
@@ -794,7 +821,7 @@ kr_onlyreload:
    call  reloadpanes
 
 kr_aborted:
-   call  unbottombox
+   call  unbox
    call  highlightitem
    call  parsefileinfo
    call  drawdirectory
@@ -842,15 +869,15 @@ keyCreatedir:
    out   (c),a
    call  api_responder
 
-   cp    $40                  ; $40 = all good, else error. error rtn will fix up stack.
-   jp    nz,error
+   call  errorhandler
+   jr    c,kk_aborted
 
    call  reloaddir
    call  acceptpanechanges
    call  drawlist
 
 kk_aborted:
-   call  unbottombox
+   call  unbox
    call  highlightitem
    call  parsefileinfo
    call  drawdirectory
