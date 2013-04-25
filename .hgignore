@@ -1,3 +1,6 @@
 syntax: glob
 CMDR.P
 CMDR.p
+CMDR.lst
+cmdr.p
+history/*

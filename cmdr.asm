@@ -10,6 +10,9 @@
 ;  20  4   5   6   7   8   9   A   B   C   D   E   F   G   H   I   J  2F
 ;  30  K   L   M   N   O   P   Q   R   S   T   U   V   W   X   Y   Z  3F
 
+; the BRASS assembler requires this
+.emptyfill	0
+
 
 ; TASM cross-assembler definitions
 ;
@@ -1880,7 +1883,8 @@ convtable:
    
 
    ; pad to the next 2k boundary
-   org ((*+2047) / 2048) * 2048 
+   ;;org ((*+2047) / 2048) * 2048 
+	.align 2048 
 
 fontdata:
    #include "font.asm"
