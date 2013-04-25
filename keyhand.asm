@@ -255,10 +255,17 @@ keyShiftEnter:
 ;
 ;
 
+keyXecute:
+   set   0,(iy+XLOADFLAG)     ; requesting an ';X' on load
+   jr    ke_extest
+
 keyEnter:
    bit   4,(iy+FFLAGS)        ; is current highlighted item a folder?
    jr    nz,ke_folder         ; forward if so to show subfolder content
 
+   res   0,(iy+XLOADFLAG)     ; no need for an ';X' on load
+
+ke_extest:
    ld    hl,FNBUF
    ld    a,$1B                ; '.'
    call  findchar
@@ -481,6 +488,7 @@ keyDelete:
    pop   de
    ld    a,1
    call  api_fileop
+   call  api_responder
 
    call  gofast
 

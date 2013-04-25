@@ -10,6 +10,7 @@
 ;  20  4   5   6   7   8   9   A   B   C   D   E   F   G   H   I   J  2F
 ;  30  K   L   M   N   O   P   Q   R   S   T   U   V   W   X   Y   Z  3F
 
+
 ; TASM cross-assembler definitions
 ;
 #define  db    .byte
@@ -25,7 +26,8 @@ CURPANE     .equ  $5d         ; index to pane flag, 0 or 1
 PRINTMOD    .equ  $5e         ; index to inverse flag, 0 or $80
 QFLAGS      .equ  $5f         ; index to misc flags
 FFLAGS      .equ  $60         ; selected file flags
-KBSTATE     .equ  $61
+KBSTATE     .equ  $61         ; flag indicates waiting for release or press
+XLOADFLAG   .equ  $62         ; bit 0 set indicates we need a ';x' on the load command
 
 NUMINLIST   .equ  19
 
@@ -92,6 +94,7 @@ starthere:
    ld    (iy+QFLAGS),a
    ld    (iy+PRINTMOD),a
    ld    (iy+KBSTATE),a
+   ld    (iy+XLOADFLAG),a
 
    call   memhigh                ; ram at 16-48k
 
@@ -844,13 +847,27 @@ ep_wait:
 ;
 executeprog:
    ld    de,FILEPATH1
+   bit   0,(iy+XLOADFLAG)
+   jr    z,ep_normal
+
+   res   0,(iy+XLOADFLAG)
+
+   call  copystring           ; copy the name
+   ex    de,hl
+   ld    (hl),$19             ; ';'
+   inc   hl
+   ld    (hl),$3d+$80         ; '[X]'
+   jr    ep_golow
+
+ep_normal:
    call  copystrTHB
 
-   call   memlow              ; ram at 8-40k
+ep_golow:
+   call  memlow              ; ram at 8-40k
    
-   call  $02e7                ; go fast - don't use proxy as we really really do need to disable nmis at this point
+   call  $02e7               ; go fast - don't use proxy as we really really do need to disable nmis at this point
 
-   ld    hl,ep_start          ; move code to 8K and jump there
+   ld    hl,ep_start         ; move code to 8K and jump there
    ld    de,$2000
    ld    bc,ep_end-ep_start
    ldir
@@ -858,15 +875,13 @@ executeprog:
    jp    $2000
 
 ep_start:
-   ld    de,FILEPATH1
-   xor   a
-   call  api_fileop
-
    ld    hl,(ERR_SP)          ; we can't return to the old program now, so clean up the stack
    ld    sp,hl
-   ld    hl,$676
+   ld    hl,$207              ; we want to return via SLOW
    push  hl
-   jp    $0207                ; return to BASIC via SLOW/FAST
+   ld    de,FILEPATH1
+   xor   a
+   jp    api_fileop           ; go loader!
 ep_end:
 
 
@@ -1248,16 +1263,10 @@ titlescreen:
 
 
 helpscreen:
-   ld    hl,helpscd
-   ld    (hs_loop+1),hl
-   ld    bc,$0000
+   ld    hl,titlestr
+   ld    bc,$0100
 
 hs_loop:
-   ld    hl,(0)
-   ld    a,h
-   or    l
-   ret   z
-
    call  strlen
    ld    a,$20
    sub   c
@@ -1265,19 +1274,19 @@ hs_loop:
    ld    c,a
    call  pr_pos
    call  printstring
+   inc   hl                   ; skip string terminator
    inc   b
-   inc   b
-   ld    hl,hs_loop+1
-   call  incmem
-   call  incmem
+
+   bit   6,(hl)               ; does a NL/DONE follow?
+   jr    z,hs_loop
+
+   bit   0,(hl)               ; $77 = done
+   ret   nz
+
+   inc   b                    ; $76 = extra newline
+   inc   hl
    jr    hs_loop
 
-
-helpscd:
-   dw    titlestr, helpstrV
-   dw    helpstr1, helpstr2, helpstr3, helpstr4, helpstr5, helpstr5a, helpstr6, helpstr6a, helpstr7
-   dw    helpstr8
-   dw    0
 
 
 #include "math.asm"
@@ -1328,6 +1337,11 @@ keyStates:
    .dw   kType1
    .dw   keyShiftEnter
 
+   .dw   $f6fe             ; shift-x (load;x)
+   .db   0,0
+   .dw   kType1
+   .dw   keyXecute
+
    .dw   $fcfb             ; shift-q (quit)
    .db   0,0
    .dw   kType1
@@ -1363,12 +1377,12 @@ keyStates:
    .dw   kType1
    .dw   keyHelp
 
-   .db   0                  ; no useful key codes have an lsb of zero
-
    .dw   $fcf7             ; shift-1 = enable key display
    .db   0,0
    .dw   kType1
    .dw   keyShift1
+
+   .db   0                  ; no useful key codes have an lsb of zero
 
 
 
@@ -1404,42 +1418,44 @@ deststr:
    dt    ";32768,"
    db    $ff
 
-helpstr1:
+titlestr:
+;         --------========--------========
+   dt    "        ZXPAND-COMMANDER        "
+   db    $ff
+   db    $0d
+   dt    "VERSION 1.3"
+   db    $ff
+   db    $0d
    dt    "CURSOR KEYS - MOVE SELECTION"
    db    $ff
-helpstr2:
+   db    $0d
    dt    "ENTER - OPEN SUBDIR OR EXEC PROG"
    db    $ff
-helpstr3:
    dt    "SHIFT ENTER - OPEN SUBDIR >OTHER"
    db    $ff
-helpstr4:
+   db    $0d
    dt    "SHIFT C - COPY FILE >OTHER"
    db    $ff
-helpstr5:
    dt    "SHIFT M - MOVE FILE >OTHER"
    db    $ff
-helpstr5a:
-   dt    "SHIFT R - RENAME FILE"
-   db    $ff
-helpstr6:
    dt    "SHIFT D - DELETE FILE"
    db    $ff
-helpstr6a:
+   dt    "SHIFT X - EXEC PROG WITH ;X FLAG"
+   db    $ff
+   db    $0d
+   dt    "SHIFT R - RENAME FILE"
+   db    $ff
    dt    "SHIFT K - KREATE A SUBDIR"
    db    $ff
-helpstr7:
+   dt    "SHIFT-SPACE CANCELS TEXT INPUT"
+   db    $ff
+   db    $0d
    dt    "SHIFT Q - QUIT"
    db    $ff
-helpstr8:
+   db    $0d
    dt    "PRESS A KEY"
    db    $ff
-helpstrV:
-   dt    "VERSION 1.2"
-   db    $ff
-helpstrX:
-   dt    " "
-   db    $ff
+   db    $1b
 
 renamestr:
    dt    "RENAME"
@@ -1447,11 +1463,6 @@ renamestr:
 
 mkdirstr:
    dt    "CREATE DIRECTORY"
-   db    $ff
-
-titlestr:
-;         --------========--------========
-   dt    "        ZXPAND-COMMANDER        "
    db    $ff
 
 intro1:
@@ -1466,8 +1477,8 @@ terminator:
 ; ------------------------------------------------------------
 
 convtable:
-   db $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F,
-   db $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F,
+   db $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0f, $76, $0F, $0F,
+   db $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $0F, $77, $0F, $0F, $0F, $0F,
    db $00, $0F, $0B, $0F, $0D, $0F, $0F, $0F, $10, $11, $17, $15, $1A, $16, $1B, $18,
    db $1C, $1D, $1E, $1F, $20, $21, $22, $23, $24, $25, $0E, $19, $13, $14, $12, $0F,
    db $0F, $26, $27, $28, $29, $2A, $2B, $2C, $2D, $2E, $2F, $30, $31, $32, $33, $34,
