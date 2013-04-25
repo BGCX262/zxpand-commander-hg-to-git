@@ -6,7 +6,7 @@ With this program and a ZX81 computer equipped with a ZXpand interface you can:
  * Browse the content of an SD card
  * Execute programs
  * Create directories
- * View text files
+ * View text and monochrome BMP files
  * Delete files and empty directories
  * Rename files and directories
  * Move and copy files
@@ -38,23 +38,35 @@ Shift + Q                Quit.
 
 The selection cursor may also be controlled with a joystick attached to a ZXpand-AY daughterboard. The button acts as the Enter key.
 
+BMP viewer limitations:
+ - mono (1bit)
+ - no compression
+ - image size max 256x192
+
+
 
 The program comes with full source code. Please consider submitting any improvements or feature upgrades back to the author for inclusion in the official release.
+
 
 For full functionality you should have firmware version 2.2 or above flashed to your ZXpand interface. For instructions on how to do this please consult the documentation.
 
 
+Code (mostly) by:
 
-SirMorris, Kelly Murta 2012
+  SirMorris, Kelly Murta, Krystian Wlosek
 
-charlie_robson@hotmail.com
 
+For submissions please contact: charlie_robson@hotmail.com
 For more sinclair ZX80/81 goodness please visit: http://www.sinclairzxworld.com/
 
 
 
-
 --== Change log ==--
+
+-- V1.7:-- 
+
+ + Monochrome BMP viewer added by Kristian Wlosek - Thanks Kristian!
+
 
 -- V1.6:-- 
 

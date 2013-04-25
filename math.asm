@@ -154,3 +154,42 @@ incmem:
    inc   (hl)
    dec   hl
    ret
+
+   
+multi_8_8:
+; procedure taken from http://baze.au.com/misc/z80bits.html; thanks Baze!
+; 1.1 Restoring 8-bit * 8-bit Unsigned
+; Input: H = Multiplier, E = Multiplicand, L = 0, D = 0
+; Output: HL = Product
+	sla	h		; optimised 1st iteration
+	jr	nc,$+3
+	ld	l,e
+
+	add	hl,hl		; unroll 7 times
+	jr	nc,$+3
+	add	hl,de
+
+	add	hl,hl
+	jr	nc,$+3
+	add	hl,de
+
+	add	hl,hl
+	jr	nc,$+3
+	add	hl,de
+
+	add	hl,hl
+	jr	nc,$+3
+	add	hl,de
+
+	add	hl,hl
+	jr	nc,$+3
+	add	hl,de
+
+	add	hl,hl
+	jr	nc,$+3
+	add	hl,de
+
+	add	hl,hl
+	jr	nc,$+3
+	add	hl,de
+	ret

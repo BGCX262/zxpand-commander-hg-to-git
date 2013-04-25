@@ -344,7 +344,7 @@ keyUpALevel:
    ld    (FNBUF+1),a
    ld    a,$ff
    ld    (FNBUF+2),a
-   jr    ke_folder            ; and continue forward to the 'concatenate path and change dir' code
+   jp    ke_folder            ; and continue forward to the 'concatenate path and change dir' code
 
 
 ;
@@ -381,6 +381,11 @@ findFileType:
    ld    c,3
    ld    de,PFILE
    call  cmp3
+   ret z
+
+   ld    c,4
+   ld    de,BMPFILE
+   call  cmp3
    ret
 
 cmp3:
@@ -405,6 +410,10 @@ HRGFILE:
    db    $2d,$37,$2c,$ff
 PFILE:
    db    $35,$ff
+BMPFILE:
+	db	$27,$32,$35,$ff
+
+
 
 
    
@@ -421,6 +430,10 @@ ke_extest:
    ld    a,c
    cp    1
    jp    z,verifytxt
+
+   cp	 4
+   jp	z,bmpviewer
+
    cp    2
    ;jp    z,showHRG
    cp    3
