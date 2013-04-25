@@ -17,10 +17,13 @@
 #define  dw    .word
 #define  ds    .block
 #define  dt    .text
+#define  equ   .equ
 #define  org   .org
 #define  end   .end
 
 ; Some EQUates
+
+PATSEP      .equ  $18         ; '/'
 
 ; the following are offsets into the calculator's workspace RAM
 ;
@@ -30,6 +33,7 @@ DBFLAG      .equ  $5f         ; show last-k value on screen
 FFLAGS      .equ  $60         ; selected file flags
 KBSTATE     .equ  $61         ; flag indicates waiting for release or press
 XLOADFLAG   .equ  $62         ; bit 0 set indicates we need a ';x' on the load command
+RENFLAGS    .equ  $63         ; rename flags
 
 NUMINLIST   .equ  19
 MAXLISTIDX  .equ  NUMINLIST-1
@@ -110,11 +114,14 @@ starthere:
    ld    a,$c9                   ; RET
    ld    (inplaceconvert),a
 
+;   call  $02e7                   ; go fast - don't use proxy as we really really do need to disable nmis at this point
+
    call  titlescreen             ; reset FRAMES so we can count the time easily
    call  waitsync                ; it counts down, but zero crossings 'adversely affect operation of the machine' :¬.
-   ld    hl,$ff40                ; set the lsb to the time to wait, then check that the msb is no longer $ff
+   ld    hl,$ff32                ; set the lsb to the time to wait, then check that the msb is no longer $ff
    ld    (FRAMES),hl
 
+notitle:
    call  initpanedata
 
    ; load and display PANE1 data
@@ -131,6 +138,8 @@ introdelay:
 
    call  drawscreen
 
+;   call  $207
+   
 mainloop:
    call  waitsync
    call  keyshow
@@ -404,7 +413,7 @@ initpanedata:
    ld    (PANE1DATA+pnSCROFFS),hl
    ld    hl,$0212
    ld    (PANE2DATA+pnSCROFFS),hl
-   ld    a,$18                      ; '/'
+   ld    a,PATSEP                      ; '/'
    ld    (PANE1DATA+pnDIRNAME),a
    ld    a,$ff
    ld    (PANE1DATA+pnDIRNAME+1),a
@@ -491,6 +500,16 @@ getpaneptr:
    ret
 
 
+
+getotherpanedirname:
+   ld    a,(iy+CURPANE)
+   xor   1
+   call  getpaneptr
+   ld    a,pnDIRNAME
+   jp    addAtohl
+
+
+
 ; ------------------------------------------------------------
 
 
@@ -534,7 +553,7 @@ updateFilePath:
 
 updatefilenamebuffer:         ; entry point when creating file paths
    call  findend              ; hl points at terminator
-   ld    a,$18                ; check to see whether we're at the root
+   ld    a,PATSEP                ; check to see whether we're at the root
    dec   hl
    cp    (hl)
    inc   hl
@@ -556,14 +575,14 @@ ufp_up:
    ld    hl,DIRNAME+1
 
    push  hl
-   ld    a,$18                ; '/' - see if there are any other slashes
+   ld    a,PATSEP                ; '/' - see if there are any other slashes
    call  findchar
    pop   hl
 
    jr    nz,ufp_toroot        ; test return from findchar - if there is only one slash in the name then we're cutting at the root
 
    call  findend              ; look backward from the end of the string for the last slash
-   ld    a,$18                ; '/'
+   ld    a,PATSEP                ; '/'
    call  rfindchar            ; we have to guarantee the presence of a slash in the buffer else this will blow
 
 ufp_toroot:
@@ -772,6 +791,44 @@ error_t:
 ; -STRING-HANDLING----------------------------------------------------------
 ;---------------------------------------------------------------------------
 
+
+; copy a path string from hl to de, terminating at the last slash
+;
+copypath:
+   call  copystring
+   ld    a,PATSEP
+   ex    de,hl
+   call  rfindchar
+   ld    (hl),$ff
+   ret
+
+
+; compares string at hl & de, returns z if same
+;
+strcmp:
+   ld    a,(de)
+   cp    (hl)
+   ret   nz
+
+   cp    $ff
+   ret   z
+
+   inc   hl
+   inc   de
+   jr    strcmp
+
+
+; all B characters must match where b <=strlen
+;
+strcmpll:
+   ld    a,(de)
+   cp    (hl)
+   ret   nz
+
+   inc   hl
+   inc   de
+   djnz  strcmpll
+   ret
 
 
 ; search a high-bit-terminated string for the given character. Will not match the last character.
@@ -1512,6 +1569,9 @@ ge_addr:
 #include "input.asm"
 #include "keyhand.asm"
 
+; ===== Text Viewer patch (kmurta) =====================================
+#include "tviewer.asm"
+; ======================================================================
 
 ; ---------------------------------------------------------- ;
 ; DATA SECTION . DATA SECTION .  DATA SECTION . DATA SECTION ;
@@ -1628,8 +1688,6 @@ FNBUF:
    ds    16
 FLEN:
    dw    0
-DMFLAG:
-   db    0
 
 
 errorstrings:
@@ -1664,7 +1722,7 @@ titlestr:
 ;         --------========--------========
    dt    "        ZXPAND-COMMANDER        "
    db    $ff
-   dt    "VERSION 1.5"
+   dt    "VERSION 1.6"
    db    $ff
    db    $0d
    dt    "CURSOR KEYS - MOVE SELECTION"
@@ -1675,6 +1733,8 @@ titlestr:
    dt    "ENTER - OPEN SUBDIR OR EXEC PROG"
    db    $ff
    dt    "SHIFT ENTER - OPEN SUBDIR >OTHER"
+   db    $ff
+   dt    ". - GO UP A DIR LEVEL"
    db    $ff
    db    $0d
    dt    "SHIFT C - COPY FILE >OTHER"
@@ -1689,8 +1749,6 @@ titlestr:
    dt    "SHIFT R - RENAME FILE"
    db    $ff
    dt    "SHIFT K - KREATE A SUBDIR"
-   db    $ff
-   dt    ". - GO UP A DIR LEVEL"
    db    $ff
    dt    "SHIFT-SPACE CANCELS TEXT INPUT"
    db    $ff
@@ -1779,7 +1837,15 @@ convtable:
    db $35, $36, $37, $38, $39, $3A, $3B, $3C, $3D, $3E, $3F, $0F, $18, $0F, $0F, $0F,
    db $0F, $26, $27, $28, $29, $2A, $2B, $2C, $2D, $2E, $2F, $30, $31, $32, $33, $34,
    db $35, $36, $37, $38, $39, $3A, $3B, $3C, $3D, $3E, $3F, $0F, $0F, $0F, $0F, $0F
+   
 
+   ; pad to the next 2k boundary
+   org ((*+2047) / 2048) * 2048 
+
+fontdata:
+   #include "font.asm"
+
+   
    db $76
 
 line1:

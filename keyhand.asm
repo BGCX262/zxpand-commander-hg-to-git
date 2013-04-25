@@ -41,10 +41,10 @@ jt_nocode:
 ; each structure has a last-k value, state, counter and pointers to a type handler and 'on press' function.
 ;
 keyhandler:
+   ld      de,keyStates
+
    ld      bc,(LAST_K)
    call    joytolastk
-
-   ld      de,keyStates
 
    ; in short:
    ; compare LAST_K to each state's id. If they don't match,
@@ -360,6 +360,54 @@ keyXecute:
 ;
 ;
 
+findFileType:
+   ld    hl,FNBUF
+   ld    a,$1B                ; '.'
+   call  findchar
+   ret   nz                   ; no dot? no filetype!
+
+   inc   hl
+   
+   ld    c,1                  ; file type 1, TXT
+   ld    de,TXTFILE
+   call  cmp3
+   ret   z
+
+   ld    c,2
+   ld    de,HRGFILE
+   call  cmp3
+   ret   z
+
+   ld    c,3
+   ld    de,PFILE
+   call  cmp3
+   ret
+
+cmp3:
+   push  hl
+   ld    b,4
+c3_next:
+   ld    a,(de)
+   cp    (hl)
+   jr    nz,c3_done
+   cp    $ff
+   jr    z,c3_done
+   inc   hl
+   inc   de
+   djnz  c3_next
+c3_done:
+   pop   hl
+   ret
+   
+TXTFILE:
+   db    $39,$3d,$39,$ff
+HRGFILE:
+   db    $2d,$37,$2c,$ff
+PFILE:
+   db    $35,$ff
+
+
+   
 keyEnter:
    bit   4,(iy+FFLAGS)        ; is current highlighted item a folder?
    jr    nz,ke_folder         ; forward if so to show subfolder content
@@ -367,23 +415,15 @@ keyEnter:
    res   0,(iy+XLOADFLAG)     ; no need for an ';X' on load
 
 ke_extest:
-   ld    hl,FNBUF
-   ld    a,$1B                ; '.'
-   call  findchar
+   call	findFileType
+   ret   nz                   ; no file type identified
 
-   ; test that the extension is dot something terminator
-
-   ret   nz                   ; no dot? no execute!
-
-   inc   hl                   ; no terminator? no execute!
-   inc   hl
-   bit   7,(hl)
-   ret   z
-
-   dec   hl                   ; examine the extension itself
-
-   ld    a,$35                ; 'P'
-   cp    (hl)
+   ld    a,c
+   cp    1
+   jp    z,verifytxt
+   cp    2
+   ;jp    z,showHRG
+   cp    3
    ret   nz
 
    ; change to the selected directory and execute the selected file
@@ -770,6 +810,8 @@ keyRename:
    cp    $1b                  ; '.'
    ret   z
 
+   ld    (iy+RENFLAGS),0
+
    call  lolightitem
 
    ld    hl,DIRNAME
@@ -789,46 +831,79 @@ keyRename:
    call  pr_pos
    ld    hl,FILEPATH2
    call  editbuffer
+   push  af
+   call  unbox
+   pop   af
    jr    z,kr_aborted
 
-   ld    a,$18                ; '/' - see if the file moves between folders
-   ld    hl,FILEPATH1
-   call  count
-   push  bc
-   ld    hl,FILEPATH2
-   call  count
-   pop   hl
-   ld    a,c
-   sub   l
-   ld    (DMFLAG),a
+   ; check to see that the path component is the same for source and dest paths
 
+   ld    hl,FILEPATH1
+   ld    de,UPBUF
+   push  de
+   call  copypath
+   ld    hl,FILEPATH2
+   ld    de,UPBUF+64
+   push  de
+   call  copypath
+   pop   hl
+   pop   de
+   call  strcmp
+   jr    z,kr_samepaths
+
+   set   0,(iy+RENFLAGS)
+
+kr_samepaths:
+   ; see if we're renaming the folder which is open in the other pane
+
+   bit   4,(iy+FFLAGS)           ; is current highlighted item a folder?
+   jr    z,kr_checksdone
+
+   call  getotherpanedirname     ; get the dirname of the other pane
+   ld    de,FILEPATH1            ; get the folder portion of the source path name
+   call  strcmp
+   jr    nz,kr_checksdone
+
+   ; hmm, we need to copy the renamed string back to the other pane iff the rename completed OK
+   ;
+   set   1,(iy+RENFLAGS)
+
+kr_checksdone:
    call  gofast
 
    call  rename
    call  errorhandler
    jr    c,kr_aborted        ; do nothing if this failed
 
-   ld    a,(DMFLAG)           ; did the file change folders? don't adjust selection if not
-   and   a
+   bit   1,(iy+RENFLAGS)
+   jr    z,kr_checkadjust
+
+   ; we need to update the path in the other pane 
+
+   call  getotherpanedirname
+   ld    de,FILEPATH2
+   ex    de,hl
+   call  copystring
+
+kr_checkadjust:
+   bit   0,(iy+RENFLAGS)      ; adjust selection if file changed folders
    jr    z,kr_onlyreload
 
    ld    hl,NENTRIES          ; eeew, but necessary - need to check for errors though!!
    call  decINZ
    call  adjustwindow
-   call  acceptpanechanges
+   call  acceptpanechanges    ; this accepts the hacked count; but it will be fixed by the reloadpanes
 
 kr_onlyreload:
    call  reloadpanes
 
 kr_aborted:
-   call  unbox
    call  highlightitem
    call  parsefileinfo
    call  drawdirectory
    call  drawfile
 
    jp    goslow
-
 
 ;
 ;
@@ -848,6 +923,9 @@ keyCreatedir:
    ld    hl,FNBUF             ; create a directory name
    ld    (hl),$ff
    call  editbuffer
+   push  af
+   call  unbox
+   pop   af
    jr    z,kk_aborted
 
    ; TODO - refactor to use dircom
@@ -877,7 +955,6 @@ keyCreatedir:
    call  drawlist
 
 kk_aborted:
-   call  unbox
    call  highlightitem
    call  parsefileinfo
    call  drawdirectory

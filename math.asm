@@ -58,6 +58,14 @@ hltimes33:
    ret
 
 
+addAtohl:
+   add   a,l
+   ld    l,a
+   ret   nc
+   inc   h
+   ret
+
+
 ; adds 8 bit value in A register to 16 bit value on stack.
 ;
 ; preserves hl, bc, de

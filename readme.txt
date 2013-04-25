@@ -1,17 +1,17 @@
-
 --== ZXpand Commander ==--
 
 
 With this program and a ZX81 computer equipped with a ZXpand interface you can:
 
-
- * Browse directories and files on the SD card
+ * Browse the content of an SD card
  * Execute programs
  * Create directories
+ * View text files
  * Delete files and empty directories
  * Rename files and directories
  * Move and copy files
- * Instantly become more attractive to the opposite sex**
+ * Instantly become more attractive to the
+   opposite sex**
 
 
 Help is always available by pressing Shift + H.
@@ -45,7 +45,7 @@ For full functionality you should have firmware version 2.2 or above flashed to 
 
 
 
-SirMorris 2012
+SirMorris, Kelly Murta 2012
 
 charlie_robson@hotmail.com
 
@@ -55,6 +55,12 @@ For more sinclair ZX80/81 goodness please visit: http://www.sinclairzxworld.com/
 
 
 --== Change log ==--
+
+-- V1.6:-- 
+
+ + Hires TXT file viewer added by K.Murta! Thanks Kelly!
+ + Improved display update after delete/rename operations
+
 
 -- V1.5:-- 
 
