@@ -116,12 +116,12 @@ starthere:
 
 ;   call  $02e7                   ; go fast - don't use proxy as we really really do need to disable nmis at this point
 
-   call  titlescreen             ; reset FRAMES so we can count the time easily
-   call  waitsync                ; it counts down, but zero crossings 'adversely affect operation of the machine' :¬.
-   ld    hl,$ff32                ; set the lsb to the time to wait, then check that the msb is no longer $ff
-   ld    (FRAMES),hl
-
-notitle:
+;   call  titlescreen             ; reset FRAMES so we can count the time easily
+;   call  waitsync                ; it counts down, but zero crossings 'adversely affect operation of the machine' :¬.
+;   ld    hl,$ff32                ; set the lsb to the time to wait, then check that the msb is no longer $ff
+;   ld    (FRAMES),hl
+;
+;notitle:
    call  initpanedata
 
    ; load and display PANE1 data
@@ -130,11 +130,11 @@ notitle:
    call  loaddir                 ; updates working block
    call  acceptpanechanges       ; copy updated info in working pane back to the originator
 
-introdelay:
-   call  waitsync                ; wait until timeout expires, or continue immediately if the load took longer than that
-   ld    a,(FRAMES+1)
-   cp    $ff
-   jr    z,introdelay
+;introdelay:
+;   call  waitsync                ; wait until timeout expires, or continue immediately if the load took longer than that
+;   ld    a,(FRAMES+1)
+;   cp    $ff
+;   jr    z,introdelay
 
    call  drawscreen
 
@@ -1725,7 +1725,7 @@ titlestr:
 ;         --------========--------========
    dt    "        ZXPAND-COMMANDER        "
    db    $ff
-   dt    "VERSION 1.6"
+   dt    "VERSION 1.7 SP1"
    db    $ff
    db    $0d
    dt    "CURSOR KEYS - MOVE SELECTION"

@@ -44,6 +44,7 @@ _bmpviewer_keys:
 	jr	nz,_bmpviewer_keys
 
 	call	hroff
+        call    reloaddir
 	ret
 
 

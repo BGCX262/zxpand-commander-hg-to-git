@@ -63,9 +63,17 @@ For more sinclair ZX80/81 goodness please visit: http://www.sinclairzxworld.com/
 
 --== Change log ==--
 
+-- V1.7 SP1:-- 
+
+ + Bugfixes - Thanks Kelly!
+ + New font
+ + Corrected version string
+
+
 -- V1.7:-- 
 
  + Monochrome BMP viewer added by Kristian Wlosek - Thanks Kristian!
+ - Removed title screen as it's not really adding anything to the workflow.
 
 
 -- V1.6:-- 

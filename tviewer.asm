@@ -46,14 +46,14 @@ verifytxt:
 ;   call  copystrTHB
 ;   call  loadfile
 
-   call  $0f2b               ; SLOW
 
-
-start_txt       equ     40960           ; Where the text file will be loaded
 
 tview:
-        ld      hl,start_txt
+        call    clshr
+        call    $0f2b           ; SLOW
         call    hron
+
+        ld      hl,start_txt
 
 new_scr:
         call    clshr
@@ -68,7 +68,7 @@ get_char:
         inc     hl
         cp      0               ; is it the end of text mark?
         jr      z,keyb_rd
-        cp      1               ; is it a LF ?
+        cp      10              ; is it a LF ?
         jr      z,prt_LF
         cp      13              ; is it a CR (followed by LF) ? 
         jr      z,pass_LF
@@ -232,6 +232,11 @@ clshr:
 inv_scr:
         push    hl
         call    waitnokey       ; wait for release key
+        call    inv_dd
+        pop     hl
+        jp      keyb_rd
+
+inv_dd:
         ld      hl,lbuf+2
         ld      b,32
 inv_lp:
@@ -240,14 +245,18 @@ inv_lp:
         ld      (hl),a
         inc     hl
         djnz    inv_lp
-        pop     hl
-        jp      keyb_rd
+        ret
 
 
 ; ===== HR drive =====================================================
 
 hron:
-        ld      ix,hr    ;simple start of the hres mode
+        ld      hl,lbuf+2
+        bit     7,(hl)          ; if the 'dummy display' is prepared to invert screen (bit 7 = 1),
+        jr      z,sethr         ; then change it to no invert.
+        call    inv_dd
+sethr:
+        ld      ix,hr           ; simple start of the hres mode
         ret
 
 hroff:
@@ -436,12 +445,13 @@ ssp:            dw      0       ; Stack pointer screens
 cur_scr:        dw      0       ; Current screen
 autoLF:         db      0       ; Auto LF flag
 
+start_txt       equ     38912           ; Where the text file will be loaded
 
 txtdestadd:
-   db    $19,$20,$1c,$25,$22,$1c,$ff    ; ';40960'
+   db    $19,$1f,$24,$25,$1d,$1e,$ff    ; ';38912'
 
 ;fntfile:
-;   db    $18,$27,$2e,$33,$18,$2b        ; '/BIN/FT885915.BIN;38912'
+;   db    $18,$27,$2e,$33,$18,$2b       ; '/BIN/FT885915.BIN;38912'
 ;   db    $39,$24,$24,$21,$25,$1d
 ;   db    $21,$1b,$27,$2e,$33,$19
 ;   db    $1f,$24,$25,$1d,$1e,$ff
