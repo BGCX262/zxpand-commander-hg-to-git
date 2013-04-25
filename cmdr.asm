@@ -176,7 +176,7 @@ ld_findnext:
    ret   z
 
    and   $3f                  ; error?
-   ret   nz
+   jp    nz,error
 
    ld    l,16                 ; 12b'name + 1b'flags + 3b'length
    xor   a
@@ -1435,7 +1435,7 @@ helpstr8:
    dt    "PRESS A KEY"
    db    $ff
 helpstrV:
-   dt    "VERSION 1.1"
+   dt    "VERSION 1.2"
    db    $ff
 helpstrX:
    dt    " "
