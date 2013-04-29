@@ -1615,12 +1615,12 @@ keyStates:
    .dw   $fdbf             ; enter dir\execute [enter]
    .db   0,0
    .dw   kType1
-   .dw   keyEnter
+   .dw   keyEnterExecute
 
    .dw   $fcbf             ; open dir in other pane [shift-enter]
    .db   0,0
    .dw   kType1
-   .dw   keyShiftEnter
+   .dw   keyOpenDirInOther
 
    .dw   $f6fe             ; load;x [shift-x]
    .db   0,0
@@ -1682,7 +1682,7 @@ keyStates:
    .dw   $fcf7             ; enable key display [shift-1]
    .db   0,0
    .dw   kType1
-   .dw   keyShift1
+   .dw   keyDebugToggle
 
    .db   0                  ; no useful key codes have an lsb of zero
 
@@ -1697,16 +1697,16 @@ FLEN:
 
 
 errorstrings:
-   dw    error00, error01, error02, error03, error04
-   dw    error05, error06, error07, error08, error09
-   dw    error10, error11, error12, error13, error14
-   dw    error15
+   dw error00, error01, error02, error03, error04
+   dw error05, error06, error07, error08, error09
+   dw error10, error11, error12, error13, error14
+   dw error15
    ; BMP errors
-   dw	 error16, error17, error18, error19, error20
+   dw error16, error17, error18, error19, error20
    ; unused errors
-   dw	 error21, error22, error23, error24, error25
-   dw	 error26, error27, error28, error29, error30
-   dw    error31
+   dw error21, error22, error23, error24, error25
+   dw error26, error27, error28, error29, error30
+   dw error31
 
 
 ; all strings which need converting go here.
@@ -1883,75 +1883,52 @@ convtable:
    
 
    ; pad to the next 2k boundary
-   ;;org ((*+2047) / 2048) * 2048 
-	.align 2048 
+   ;;org ((*+2047) / 2048) * 2048   ; for TASM
+	.align 2048                      ; for BRASS
 
 fontdata:
    #include "font.asm"
 
    
+   ; end of line for BASIC
    db $76
 
 line1:
-   .byte 0,1                     ; line number
-   .word xxdfile-$-2             ; line length
+   .byte 0,1                        ; line number
+   .word xxdfile-$-2                ; line length
 
-   .byte $f9,$d4,$c5             ; RAND USR VAL
+   .byte $f9,$d4,$c5                ; RAND USR VAL
    .byte $b,$1d,$22,$21,$1d,$20,$b  ; "16514"
-   .byte $76                     ; N/L
+   .byte $76                        ; N/L
 
 ;- Display file --------------------------------------------
 
 xxdfile:
    db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
-   ds 32
-   db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
+   ds 32 \ db $76
 
 ;- BASIC-Variables ----------------------------------------
 

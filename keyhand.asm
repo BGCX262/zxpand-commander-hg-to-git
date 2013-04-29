@@ -7,12 +7,12 @@
 ; bc will be overwritten with the key code value associated with the direction
 ;
 joytolastk:
-   push  bc
    call  api_rdjoy
-   pop   bc
+   ld    bc,(LAST_K)
+
    or    7
    cp    $ff
-   ret   z                 ; return immediately if no bits clear
+   ret   z                 ; if no bits clear return immediately with last_k in BC
 
    ld    hl,joycodes       ; begin scanning
    ld    e,5
@@ -33,6 +33,8 @@ jt_nocode:
    dec   e
    jr    nz,jt_scan
 
+   ; shouldn't reach here ..!
+
    ret
 
 
@@ -41,10 +43,8 @@ jt_nocode:
 ; each structure has a last-k value, state, counter and pointers to a type handler and 'on press' function.
 ;
 keyhandler:
-   ld      de,keyStates
-
-   ld      bc,(LAST_K)
    call    joytolastk
+   ld      de,keyStates
 
    ; in short:
    ; compare LAST_K to each state's id. If they don't match,
@@ -188,7 +188,7 @@ kt3_done:
 
 
 
-keyShift1:
+keyDebugToggle:
    bit   0,(iy+DBFLAG)
    jr    z,ksc_set
 
@@ -205,7 +205,7 @@ ksc_set:
 ;
 
 
-keyShiftEnter:
+keyOpenDirInOther:
    bit   4,(iy+FFLAGS)        ; is current highlighted item a folder? return if not.
    ret   z
 
@@ -417,7 +417,7 @@ BMPFILE:
 
 
    
-keyEnter:
+keyEnterExecute:
    bit   4,(iy+FFLAGS)        ; is current highlighted item a folder?
    jr    nz,ke_folder         ; forward if so to show subfolder content
 
