@@ -44,6 +44,8 @@ BMP viewer limitations:
  - image size max 256x192
 
 
+KMurta's JOY81 programmable joystick is configured when executing a program through the commander.
+
 
 The program comes with full source code. Please consider submitting any improvements or feature upgrades back to the author for inclusion in the official release.
 
@@ -62,6 +64,11 @@ For more sinclair ZX80/81 goodness please visit: http://www.sinclairzxworld.com/
 
 
 --== Change log ==--
+
+-- V1.8:-- 
+
+ + KMurta's programmable joystick integration - Thanks Kelly!
+
 
 -- V1.7 SP1:-- 
 

@@ -1741,7 +1741,7 @@ titlestr:
 ;         --------========--------========
    dt    "        ZXPAND-COMMANDER        "
    db    $ff
-   dt    "VERSION 1.7 SP2"
+   dt    "VERSION 1.8"
    db    $ff
    db    $0d
    dt    "CURSOR KEYS - MOVE SELECTION"
