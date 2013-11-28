@@ -106,6 +106,10 @@ starthere:
 
    call   memhigh                ; ram at 16-48k
 
+; ===== Set Joy patch (kmurta) =========================================
+   call  setjoy
+; ======================================================================
+
    ; convert the ascii source to zeddy strings
    ;
    call  initconvert             ; initialise the ascii->zeddy conversion table above RAMTOP
@@ -1574,7 +1578,10 @@ ge_addr:
 
 ; ===== Text Viewer patch (kmurta) =====================================
 #include "tviewer.asm"
+; ===== Set Joy patch (kmurta) =========================================
+#include "setjoy.asm"
 ; ======================================================================
+
 ; ===== BMP viewer  =====================================
 #include "bmpview.asm"
 ; ======================================================================
@@ -1697,16 +1704,16 @@ FLEN:
 
 
 errorstrings:
-   dw error00, error01, error02, error03, error04
-   dw error05, error06, error07, error08, error09
-   dw error10, error11, error12, error13, error14
-   dw error15
+   dw    error00, error01, error02, error03, error04
+   dw    error05, error06, error07, error08, error09
+   dw    error10, error11, error12, error13, error14
+   dw    error15
    ; BMP errors
-   dw error16, error17, error18, error19, error20
+   dw	 error16, error17, error18, error19, error20
    ; unused errors
-   dw error21, error22, error23, error24, error25
-   dw error26, error27, error28, error29, error30
-   dw error31
+   dw	 error21, error22, error23, error24, error25
+   dw	 error26, error27, error28, error29, error30
+   dw    error31
 
 
 ; all strings which need converting go here.
@@ -1894,12 +1901,12 @@ fontdata:
    db $76
 
 line1:
-   .byte 0,1                        ; line number
-   .word xxdfile-$-2                ; line length
+   .byte 0,1                     ; line number
+   .word xxdfile-$-2             ; line length
 
-   .byte $f9,$d4,$c5                ; RAND USR VAL
+   .byte $f9,$d4,$c5             ; RAND USR VAL
    .byte $b,$1d,$22,$21,$1d,$20,$b  ; "16514"
-   .byte $76                        ; N/L
+   .byte $76                     ; N/L
 
 ;- Display file --------------------------------------------
 

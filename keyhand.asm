@@ -448,6 +448,10 @@ ke_extest:
    call  errorhandler
    ret   c
 
+; ===== Set Joy patch (kmurta) =========================================
+   call  config_joy
+; ======================================================================
+
    ld    hl,FNBUF             ; copy the selected filename up to filepath1 and set the high bit of the name
    jp    executeprog
 
