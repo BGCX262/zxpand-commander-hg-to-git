@@ -216,7 +216,7 @@ l08:
         ret             ; with joystick board configured.
 
 
-:The following routine divides d by e and places the quotient in d and the remainder in a
+;:The following routine divides d by e and places the quotient in d and the remainder in a
 div_d_e:
         xor a
         ld b, 8
